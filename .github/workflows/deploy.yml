@@ -14,8 +14,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Copy files to server root
+      - name: Copy files to Web Root
         run: |
-          echo "Copying files to /var/www/School-Management-System..."
+          echo "Deploying School Management System files..."
           cp -r ./* /var/www/School-Management-System/
-          echo "Files copied successfully!"
+          echo "Deployment Completed Successfully!"
