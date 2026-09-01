@@ -1,0 +1,278 @@
+from django.db.models.signals import post_delete, post_save, m2m_changed
+from django.dispatch import receiver
+from .models import Coordinator
+from users.models import User
+from notifications.services import create_notification
+
+
+@receiver(post_save, sender=Coordinator)
+def notify_coordinator_on_update(sender, instance, created, **kwargs):
+    """Send notification to coordinator when their profile is updated"""
+    if not created:  # Only on updates, not creation
+        try:
+            # Get actor from instance (set by viewset before save)
+            actor = getattr(instance, '_actor', None)
+            
+            # Find the coordinator's user account
+            coordinator_user = None
+            if instance.email:
+                coordinator_user = User.objects.filter(email__iexact=instance.email).first()
+            elif instance.employee_code:
+                coordinator_user = User.objects.filter(username=instance.employee_code).first()
+            
+            if coordinator_user:
+                campus_name = instance.campus.campus_name if instance.campus else ''
+                verb = "Your Coordinator profile has been updated"
+                target_text = f"by {actor.get_full_name() if actor and hasattr(actor, 'get_full_name') else (str(actor) if actor else 'System')}" + (f" at {campus_name}" if campus_name else "")
+                create_notification(
+                    recipient=coordinator_user, 
+                    actor=actor, 
+                    verb=verb, 
+                    target_text=target_text, 
+                    data={"coordinator_id": instance.id}
+                )
+                print(f"[OK] Sent update notification to coordinator {instance.full_name}")
+        except Exception as e:
+            print(f"Error sending update notification to coordinator {instance.id}: {str(e)}")
+
+@receiver(post_delete, sender=Coordinator)
+def delete_user_when_coordinator_deleted(sender, instance: Coordinator, **kwargs):
+    """Send notification before deleting coordinator, then cleanup user"""
+    try:
+        # Get actor from instance (set by viewset before delete)
+        actor = getattr(instance, '_actor', None)
+        
+        # Find the coordinator's user account before deleting
+        coordinator_user = None
+        if instance.email:
+            coordinator_user = User.objects.filter(email__iexact=instance.email).first()
+        elif instance.employee_code:
+            coordinator_user = User.objects.filter(username=instance.employee_code).first()
+        
+        # Send notification before deletion
+        if coordinator_user:
+            campus_name = instance.campus.campus_name if instance.campus else ''
+            verb = "Your Coordinator profile has been deleted"
+            target_text = f"by {actor.get_full_name() if actor and hasattr(actor, 'get_full_name') else (str(actor) if actor else 'System')}" + (f" at {campus_name}" if campus_name else "")
+            create_notification(
+                recipient=coordinator_user, 
+                actor=actor, 
+                verb=verb, 
+                target_text=target_text, 
+                data={"coordinator_id": instance.id}
+            )
+            print(f"[OK] Sent deletion notification to coordinator {instance.full_name}")
+        
+        # Now cleanup user
+        if instance.email:
+            User.objects.filter(email__iexact=instance.email).delete()
+        if instance.employee_code:
+            User.objects.filter(username=instance.employee_code).delete()
+    except Exception as e:
+        print(f"Error in delete_user_when_coordinator_deleted: {str(e)}")
+
+from teachers.models import Teacher
+from classes.models import Grade
+from services.user_creation_service import UserCreationService
+
+@receiver(post_save, sender=Coordinator)
+def create_coordinator_user(sender, instance, created, **kwargs):
+    """Auto-create user when coordinator is created"""
+    if created:
+        try:
+            # Get actor from instance (set by viewset before save)
+            actor = getattr(instance, '_actor', None)
+            
+            # If shift is both and no level(s) yet (M2M set after initial save),
+            # defer user creation to the m2m_changed handler
+            if getattr(instance, 'shift', None) == 'both':
+                has_levels = (getattr(instance, 'level_id', None) is not None) or (
+                    hasattr(instance, 'assigned_levels') and instance.assigned_levels.exists()
+                )
+                if not has_levels:
+                    print("Deferring user creation until levels are attached (both shift)")
+                    return
+            
+            # Check if user already exists
+            from users.models import User
+            if User.objects.filter(email=instance.email).exists():
+                print(f"User already exists for coordinator {instance.full_name}")
+                try:
+                    existing_user = User.objects.filter(email=instance.email).first()
+                    campus_name = instance.campus.campus_name if instance.campus else ''
+                    verb = "You have been added as a Coordinator"
+                    target_text = f"at {campus_name}" if campus_name else ""
+                    create_notification(recipient=existing_user, actor=actor, verb=verb, target_text=target_text, data={"coordinator_id": instance.id})
+                except Exception:
+                    pass
+                return
+            
+            user, message = UserCreationService.create_user_from_entity(instance, 'coordinator')
+            if not user:
+                print(f"Failed to create user for coordinator {instance.id}: {message}")
+            else:
+                print(f"[OK] Created user for coordinator: {instance.full_name} ({instance.employee_code})")
+                try:
+                    campus_name = instance.campus.campus_name if instance.campus else ''
+                    verb = "You have been added as a Coordinator"
+                    target_text = f"at {campus_name}" if campus_name else ""
+                    create_notification(recipient=user, actor=actor, verb=verb, target_text=target_text, data={"coordinator_id": instance.id})
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Error creating user for coordinator {instance.id}: {str(e)}")
+
+def _auto_assign_for_coordinator(instance):
+    """Shared logic to auto-assign teachers based on coordinator's managed levels."""
+    # Determine managed levels (supports shift 'both')
+    managed_levels = []
+    if getattr(instance, 'shift', None) == 'both' and hasattr(instance, 'assigned_levels') and instance.assigned_levels.exists():
+        managed_levels = list(instance.assigned_levels.all())
+    elif instance.level:
+        managed_levels = [instance.level]
+
+    level_name = ", ".join([lvl.name for lvl in managed_levels]) if managed_levels else "No Level"
+    campus_name = instance.campus.campus_name if instance.campus else "No Campus"
+    print(f"Coordinator sync: {instance.full_name} for {level_name} in {campus_name}")
+
+    try:
+        # Check if any level is assigned
+        if not managed_levels:
+            print(f"No level assigned to coordinator {instance.full_name}")
+            return
+            
+        # Get grades for these levels
+        grades = Grade.objects.filter(level__in=managed_levels)
+        grade_names = [g.name for g in grades]
+        
+        if not grade_names:
+            print(f"No grades found for level list: {level_name}")
+            return
+        
+        # Find teachers for this campus who teach grades in these levels
+        teachers = Teacher.objects.filter(
+            current_campus=instance.campus,
+            current_classes_taught__isnull=False
+        )
+        
+        assigned_count = 0
+        for teacher in teachers:
+            try:
+                # Extract grade from current_classes_taught
+                classes_text = teacher.current_classes_taught.lower()
+                grade_name = None
+                
+                # Try to extract grade from classes taught
+                import re
+                grade_match = re.search(r'grade\s*[-]?\s*(\d+)', classes_text)
+                if grade_match:
+                    grade_number = grade_match.group(1)
+                    grade_name = f"Grade {grade_number}"  # Use space format to match database
+                else:
+                    # Check for Pre-Primary classes
+                    if any(term in classes_text for term in ['nursery', 'kg-1', 'kg-2', 'kg1', 'kg2', 'kg-ii', 'kg-i']):
+                        if 'nursery' in classes_text:
+                            grade_name = 'Nursery'  # Fix typo
+                        elif 'kg-1' in classes_text or 'kg1' in classes_text or 'kg-i' in classes_text:
+                            grade_name = 'KG-I'  # Use database format
+                        elif 'kg-2' in classes_text or 'kg2' in classes_text or 'kg-ii' in classes_text:
+                            grade_name = 'KG-II'  # Use database format
+                
+                if grade_name and grade_name in grade_names:
+                    # Add coordinator (not replace) - use ManyToMany
+                    if instance not in teacher.assigned_coordinators.all():
+                        teacher.assigned_coordinators.add(instance)
+                        assigned_count += 1
+                        print(f"Added coordinator {instance.full_name} to {teacher.full_name}")
+                    
+            except Exception as e:
+                print(f"Error assigning teacher {teacher.full_name}: {str(e)}")
+        
+        print(f"Auto-assigned {assigned_count} teachers to coordinator {instance.full_name}")
+        
+    except Exception as e:
+        print(f"Error auto-assigning teachers to coordinator {instance.full_name}: {str(e)}")
+
+
+@receiver(post_save, sender=Coordinator)
+def auto_assign_teachers_to_new_coordinator(sender, instance, created, **kwargs):
+    """
+    Automatically assign teachers to newly created coordinators
+    """
+    if created and instance.is_currently_active:
+        _auto_assign_for_coordinator(instance)
+
+
+@receiver(post_save, sender=Coordinator)
+def sync_coordinator_to_user(sender, instance, created, **kwargs):
+    """Sync Coordinator profile changes back to the associated User account."""
+    if created:
+        return
+
+    try:
+        from users.models import User
+        # Coordinator doesn't have OneToOneField, find via employee_code or email
+        user = User.objects.filter(username=instance.employee_code).first()
+        if not user and instance.email:
+            user = User.objects.filter(email__iexact=instance.email).first()
+
+        if user:
+            changed = False
+            # 1. Sync Email
+            if user.email != instance.email:
+                if not User.objects.exclude(pk=user.pk).filter(email=instance.email).exists():
+                    user.email = instance.email
+                    changed = True
+
+            # 2. Sync Name (Split full_name)
+            if instance.full_name:
+                name_parts = instance.full_name.strip().split(' ', 1)
+                first_name = name_parts[0]
+                last_name = name_parts[1] if len(name_parts) > 1 else ""
+                
+                if user.first_name != first_name or user.last_name != last_name:
+                    user.first_name = first_name
+                    user.last_name = last_name
+                    changed = True
+
+            # 3. Sync Campus
+            if instance.campus and user.campus_id != instance.campus.id:
+                user.campus = instance.campus
+                changed = True
+
+            if changed:
+                user.save(update_fields=['email', 'first_name', 'last_name', 'campus'])
+                print(f"[OK] Synced Coordinator {instance.full_name} changes back to User {user.username}")
+    except Exception as e:
+        print(f"[ERROR] Failed to sync coordinator to user: {str(e)}")
+
+
+@receiver(m2m_changed, sender=Coordinator.assigned_levels.through)
+def on_assigned_levels_changed(sender, instance, action, reverse, model, pk_set, **kwargs):
+    """Re-run auto assignment when assigned levels change for a coordinator."""
+    if action in {"post_add", "post_remove", "post_clear"} and instance.is_currently_active:
+        # If the coordinator doesn't yet have a user/employee code because we deferred on create,
+        # attempt to create the user now that levels are available
+        try:
+            # Create user if there's not already a matching user by email or username.
+            # Rationale: when Coordinator with shift 'both' is created DRF saves the model first
+            # (employee_code gets generated) and assigned_levels are set after via M2M. The
+            # post_save handler defers creation and relies on this m2m_changed handler to
+            # finish user creation. We must not skip creation just because employee_code exists.
+            from users.models import User
+            user_exists = False
+            if instance.email:
+                user_exists = User.objects.filter(email__iexact=instance.email).exists()
+            if not user_exists and instance.employee_code:
+                user_exists = User.objects.filter(username=instance.employee_code).exists()
+
+            if not user_exists:
+                user, message = UserCreationService.create_user_from_entity(instance, 'coordinator')
+                if not user:
+                    print(f"Failed to create user after levels set for coordinator {instance.id}: {message}")
+                else:
+                    print(f"[OK] Created user after levels set for coordinator: {instance.full_name} ({instance.employee_code})")
+        except Exception as e:
+            print(f"Error creating user after levels set for coordinator {instance.id}: {str(e)}")
+
+        _auto_assign_for_coordinator(instance)

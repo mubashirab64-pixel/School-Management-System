@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Django
+*.log
+staticfiles/
+# Keep media tracked if needed; ignore everything by default except placeholder
+media/*
+!media/.gitkeep
+
+# SQLite (uncomment to ignore if not tracked)
+# backend/db.sqlite3
+
+# Environments
+.env
+.venv/
+venv/
+ENV/
+.env.local
+postgresql/
+
+# Frontend / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# Logs
+logs
+*.pid
+*.seed
+*.pid.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Credentials
+backend/credentials.json
+backend/backend/settings.py
+nginx/

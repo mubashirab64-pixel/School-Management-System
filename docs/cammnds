@@ -1,0 +1,100 @@
+# 🚀 Project Commands & Scripts
+
+This document contains all the essential commands for managing the SIS project (Backend & Frontend).
+
+---
+
+## 🏗️ Execution Commands
+
+### Backend (Django)
+*   **Start Backend (Daphne/ASGI):**
+    ```bash
+    daphne -b 0.0.0.0 -p 8000 backend.asgi:application
+    ```
+    *Use this for production-like performance and WebSocket support.*
+
+*   **Start Backend (Development):**
+    ```bash
+    python manage.py runserver 0.0.0.0:8000
+    ```
+
+
+    docker exec -it sms_backend python manage.py makemigrations
+    
+    docker exec -it sms_backend python manage.py migrate
+
+    docker compose exec backend python manage.py seed_demo_progression
+    cammand 
+### Frontend (Next.js)
+*   **Start Frontend (Development):**
+    ```bash
+    npm run dev
+    ```
+
+---
+allow superadmin to staff status 
+docker exec -it sms_backend python manage.py shell
+
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+u = User.objects.get(email='ahadahmed453266@gmail.com')
+u.is_staff = True
+u.is_superuser = True
+u.save()
+
+print("Done!")
+
+
+    password unknown
+
+Fix:
+
+docker exec -it sms_backend python manage.py changepassword ahadahmed453266@gmail.com
+
+
+
+## 🛠️ Management Scripts (Backend)
+
+Run these commands inside the `backend` directory using `python manage.py`.
+
+### 1. User Creation
+*   **Command:** `python manage.py create_user`
+*   **Description:** Interactively creates any type of user (Super Admin, Org Admin, Principal, Coordinator, Teacher, Donor).
+*   **Mechanism:** Auto-generates Employee Codes (e.g., `OA-25-0001` or `S-25-0001`) and assigns them to an Organization.
+
+### 2. Permissions Seeding
+*   **Command:** `python manage.py seed_permissions`
+*   **Description:** Seeds the database with all role-based permissions defined in the system. Run this whenever new permission codenames are added to the code.
+
+### 3. Subscription Plans Seeding
+*   **Command:** `python manage.py seed_plans`
+*   **Description:** Creates default subscription plans (Basic, Standard, Enterprise) in the system. Run this to initialize your plans.
+
+### 4. Organization Migration
+*   **Command:** `python manage.py migrate_to_org`
+*   **Description:** Migrates existing campus-based data into the multi-organization structure.
+
+### 5. Database Migrations
+*   **Command:** `python manage.py makemigrations`
+*   **Command:** `python manage.py migrate`
+*   **Description:** Standard Django commands to synchronize database schema.
+
+---
+
+## 🔑 Login Identification Logic
+Users can login using either their **Email** or their **Employee Code**.
+
+*   **Super Admin:** `S-25-XXXX`
+*   **Org Admin:** `OA-25-XXXX`
+*   **Principal:** `C01-X-YY-P-XXXX`
+*   **Coordinator:** `C01-X-YY-C-XXXX`
+*   **Teacher:** `C01-X-YY-T-XXXX`
+*   **Accounts Officer:** `C01-X-YY-AO-XXXX`
+*   **Admissions Counselor:** `C01-X-YY-AC-XXXX`
+*   **Compliance Officer:** `C01-X-YY-CO-XXXX`
+*   **Donor:** `D-25-XXXX`
+
+---
+*Last updated: April 06, 2026*

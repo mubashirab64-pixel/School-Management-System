@@ -1,0 +1,38 @@
+from django.urls import path
+from .views import (
+    SchoolSettingsView,
+    RetestScheduleCreateView,
+    RetestScheduleListView,
+    RetestScheduleUpdateView,
+    RetestScheduleCancelView,
+    RetestResultEnterView,
+    RetestResultSubmitView,
+    RetestCoordinatorApproveView,
+    RetestCoordinatorRejectView,
+    RetestPrincipalApproveView,
+    RetestPrincipalRejectView,
+    TeacherRetestListView,
+    CoordinatorRetestListView,
+    PrincipalRetestListView,
+    StudentMyRetestsView,
+    StudentApprovedRetestsView,
+)
+
+urlpatterns = [
+    path('settings/', SchoolSettingsView.as_view(), name='retest-school-settings'),
+    path('schedule/create/', RetestScheduleCreateView.as_view(), name='retest-schedule-create'),
+    path('schedule/list/', RetestScheduleListView.as_view(), name='retest-schedule-list'),
+    path('schedule/update/<int:pk>/', RetestScheduleUpdateView.as_view(), name='retest-schedule-update'),
+    path('schedule/cancel/<int:pk>/', RetestScheduleCancelView.as_view(), name='retest-schedule-cancel'),
+    path('result/enter/', RetestResultEnterView.as_view(), name='retest-result-enter'),
+    path('result/submit/<int:pk>/', RetestResultSubmitView.as_view(), name='retest-result-submit'),
+    path('coordinator/approve/<int:pk>/', RetestCoordinatorApproveView.as_view(), name='retest-coordinator-approve'),
+    path('coordinator/reject/<int:pk>/', RetestCoordinatorRejectView.as_view(), name='retest-coordinator-reject'),
+    path('principal/approve/<int:pk>/', RetestPrincipalApproveView.as_view(), name='retest-principal-approve'),
+    path('principal/reject/<int:pk>/', RetestPrincipalRejectView.as_view(), name='retest-principal-reject'),
+    path('teacher/list/', TeacherRetestListView.as_view(), name='retest-teacher-list'),
+    path('coordinator/list/', CoordinatorRetestListView.as_view(), name='retest-coordinator-list'),
+    path('principal/list/', PrincipalRetestListView.as_view(), name='retest-principal-list'),
+    path('student/my-retests/', StudentMyRetestsView.as_view(), name='retest-student-my-retests'),
+    path('student/<int:student_id>/approved/', StudentApprovedRetestsView.as_view(), name='retest-student-approved'),
+]

@@ -1,0 +1,34 @@
+Django>=5.0,<6.0
+djangorestframework
+djangorestframework-simplejwt
+psycopg2-binary
+Pillow
+gspread==5.12.4
+python-dateutil
+django-cors-headers
+redis
+django-redis
+django-filter
+requests==2.28.2
+google-auth==2.23.4
+google-auth-oauthlib==1.0.0
+google-auth-httplib2==0.1.1
+graphene-django
+django-cleanup
+pandas>=2.1.0
+python-decouple
+python-dotenv
+channels
+channels-redis
+daphne
+psutil
+whitenoise
+django-phonenumber-field[phonenumbers]
+# Web Push (browser OS notifications)
+pywebpush==2.3.0
+
+# Exports
+openpyxl        # Excel export (attendance/views.export_attendance_excel imported it
+                # for a long time without being declared here, so that endpoint 500'd)
+reportlab       # PDF export. Pure Python on purpose: WeasyPrint needs cairo/pango
+                # system packages, which the Docker build has no business fetching.

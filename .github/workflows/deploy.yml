@@ -1,0 +1,22 @@
+name: Deploy School Management System
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy & Restart App
+        run: |
+          echo "Deploying School Management System..."
+          mkdir -p /var/www/School-Management-System
+          cp -r . /var/www/School-Management-System/
+          echo "Deployment Completed Successfully!"
